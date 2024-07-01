@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.internal.InternalFutures;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.ForOverride;
 import com.google.j2objc.annotations.ReflectionSupport;
+import java.lang.reflect.Field;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
@@ -44,6 +45,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import javax.annotation.CheckForNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import sun.misc.Unsafe;
 
 /**
  * An abstract implementation of {@link ListenableFuture}, intended for advanced users only. More
@@ -65,7 +67,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  * @since 1.0
  */
 @SuppressWarnings({
-  "ShortCircuitBoolean", // we use non-short circuiting comparisons intentionally
+  // Whenever both tests are cheap and functional, it's faster to use &, | instead of &&, ||
+  "ShortCircuitBoolean",
   "nullness", // TODO(b/147136275): Remove once our checker understands & and |.
 })
 @GwtCompatible(emulated = true)
@@ -73,8 +76,6 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 @ElementTypesAreNonnullByDefault
 public abstract class AbstractFuture<V extends @Nullable Object> extends InternalFutureFailureAccess
     implements ListenableFuture<V> {
-  // NOTE: Whenever both tests are cheap and functional, it's faster to use &, | instead of &&, ||
-
   static final boolean GENERATE_CANCELLATION_CAUSES;
 
   static {
@@ -1343,7 +1344,7 @@ public abstract class AbstractFuture<V extends @Nullable Object> extends Interna
    */
   @SuppressWarnings({"SunApi", "removal"}) // b/345822163
   private static final class UnsafeAtomicHelper extends AtomicHelper {
-    static final sun.misc.Unsafe UNSAFE;
+    static final Unsafe UNSAFE;
     static final long LISTENERS_OFFSET;
     static final long WAITERS_OFFSET;
     static final long VALUE_OFFSET;
@@ -1351,18 +1352,18 @@ public abstract class AbstractFuture<V extends @Nullable Object> extends Interna
     static final long WAITER_NEXT_OFFSET;
 
     static {
-      sun.misc.Unsafe unsafe = null;
+      Unsafe unsafe = null;
       try {
-        unsafe = sun.misc.Unsafe.getUnsafe();
+        unsafe = Unsafe.getUnsafe();
       } catch (SecurityException tryReflectionInstead) {
         try {
           unsafe =
               AccessController.doPrivileged(
-                  new PrivilegedExceptionAction<sun.misc.Unsafe>() {
+                  new PrivilegedExceptionAction<Unsafe>() {
                     @Override
-                    public sun.misc.Unsafe run() throws Exception {
-                      Class<sun.misc.Unsafe> k = sun.misc.Unsafe.class;
-                      for (java.lang.reflect.Field f : k.getDeclaredFields()) {
+                    public Unsafe run() throws Exception {
+                      Class<Unsafe> k = Unsafe.class;
+                      for (Field f : k.getDeclaredFields()) {
                         f.setAccessible(true);
                         Object x = f.get(null);
                         if (k.isInstance(x)) {
